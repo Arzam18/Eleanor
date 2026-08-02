@@ -1,0 +1,69 @@
+name: Eleanor Android Native Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ "main", "master" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-android:
+    name: Eleanor Android (aarch64)
+    runs-on: ubuntu-24.04
+
+    steps:
+    - name: Clone Repository
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Set up Android NDK Environment
+      run: |
+        NDKV="27.2.12479018"
+        ANDROID_ROOT=/usr/local/lib/android
+        ANDROID_SDK_ROOT=$ANDROID_ROOT/sdk
+        SDKMANAGER=$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager
+        
+        echo "y" | $SDKMANAGER "ndk;$NDKV"
+        ANDROID_NDK_ROOT=$ANDROID_SDK_ROOT/ndk/$NDKV
+        ANDROID_NDK_BIN=$ANDROID_NDK_ROOT/toolchains/llvm/prebuilt/linux-x86_64/bin
+        
+        echo "ANDROID_NDK_BIN=$ANDROID_NDK_BIN" >> $GITHUB_ENV
+        echo "TOOLCHAIN_PREFIX=$ANDROID_NDK_BIN/aarch64-linux-android29-" >> $GITHUB_ENV
+
+    - name: Locate Neural Network (nnue.bin)
+      run: |
+        if [ ! -f "nnue.bin" ]; then
+          NNUE_FILE=$(find . -name "nnue.bin" | head -n 1)
+          if [ -n "$NNUE_FILE" ]; then
+            echo "Found nnue.bin at $NNUE_FILE. Copying to root directory..."
+            cp "$NNUE_FILE" ./nnue.bin
+          else
+            echo "ERROR: nnue.bin is missing from your repository!"
+            exit 1
+          fi
+        fi
+
+    - name: Compile Eleanor natively for Android
+      run: |
+        export PATH=${{ env.ANDROID_NDK_BIN }}:$PATH
+        
+        # We invoke make directly, overriding variables to target aarch64 with Clang
+        make clean
+        make \
+          CXX=clang++ \
+          OS=Linux \
+          ARCH=aarch64 \
+          CXXFLAGS="-std=c++20 -O3 -Wall -target aarch64-linux-android29 -mcpu=cortex-a72" \
+          LDFLAGS="-O3 -target aarch64-linux-android29 -static"
+          
+        # Rename output to clearly indicate architecture
+        mv Eleanor Eleanor-Android-ARM64
+
+    - name: Upload Binary Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Eleanor-Android-ARM64
+        path: Eleanor-Android-ARM64
