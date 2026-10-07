@@ -2,6 +2,7 @@
 #include "board.h"
 #include "uci.h"
 #include <vector>
+#include <mutex>
 #include "move.h"
 #include <algorithm>
 #include "stopwatch.h"
@@ -54,6 +55,14 @@ void RefreshTunableCaches();
 #endif
 
 class SearchContext;
+
+struct RootVote {
+    Move bestMove;
+    int score = 0;
+    int depth = 0;
+};
+
+SearchResults VoteRootMoves(const std::vector<RootVote>& votes);
 
 class CaptHistory {
 private:
@@ -216,6 +225,10 @@ class SearchContext {
 public:
     bool doPrint = false;
 
+    int threadId = 0;
+    std::vector<RootVote>* voteTable = nullptr;
+    std::mutex* voteMutex = nullptr;
+
     U64 nodes = 0;
     U64 nodesToGo = 0;
     int timeToSearch = 0;
@@ -258,6 +271,14 @@ public:
         killerMoves = {};
         ss = {};
         positionHistory.resize(1000);
+    }
+
+    void CopyLearningFrom(const SearchContext& other) {
+        history = other.history;
+        conthist = other.conthist;
+        corrhist = other.corrhist;
+        capthist = other.capthist;
+        killerMoves = other.killerMoves;
     }
 };
 
